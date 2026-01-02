@@ -6,7 +6,7 @@ from PIL import Image
 import google.generativeai as genai
 
 # ===============================
-# Gemini Configuration (FIXED)
+# Gemini Configuration
 # ===============================
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
@@ -99,29 +99,73 @@ with st.sidebar:
             st.session_state.messages.append({"role": "assistant", "content": response})
 
 # ===============================
-# MAIN AREA — CLOUD CAMERA (FIXED)
+# MAIN AREA — AR CAMERA (FOCUS + ENTRY LOGIC)
 # ===============================
-st.subheader("📷 AR Sight (Browser Camera)")
+st.subheader("📷 AR Sight (Focus Zone Enabled)")
 
-uploaded = st.camera_input("Enable camera")
+uploaded = st.camera_input("Bring an object into the focus box")
+
+# Store previous ROI for entry detection
+if "prev_roi" not in st.session_state:
+    st.session_state.prev_roi = None
 
 if uploaded:
     image = Image.open(uploaded)
     frame = np.array(image)
 
     h, w, _ = frame.shape
-    roi_size = 200
-    x1, y1 = w // 2 - roi_size // 2, h // 2 - roi_size // 2
-    x2, y2 = x1 + roi_size, y1 + roi_size
 
-    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 255), 2)
-    cv2.putText(frame, "FOCUS AREA", (x1, y1 - 10),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+    # ---- CENTER FOCUS BOX ----
+    roi_size = int(min(h, w) * 0.35)
+    x1 = w // 2 - roi_size // 2
+    y1 = h // 2 - roi_size // 2
+    x2 = x1 + roi_size
+    y2 = y1 + roi_size
+
+    # Draw focus box
+    cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 215, 0), 3)
+    cv2.putText(frame, "FOCUS AREA", (x1, y1 - 12),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 215, 0), 2)
+
+    # ---- ROI PROCESSING ----
+    roi = frame[y1:y2, x1:x2]
+    gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    gray_roi = cv2.GaussianBlur(gray_roi, (7, 7), 0)
+
+    highlight = False
+
+    # ---- ENTRY DETECTION ----
+    if st.session_state.prev_roi is not None:
+        diff = cv2.absdiff(st.session_state.prev_roi, gray_roi)
+        _, thresh = cv2.threshold(diff, 25, 255, cv2.THRESH_BINARY)
+
+        change_ratio = np.sum(thresh) / thresh.size
+
+        # Object ENTERED the box
+        if change_ratio > 0.02:
+            highlight = True
+
+    st.session_state.prev_roi = gray_roi
+
+    # ---- HIGHLIGHT ONLY NEW ENTRIES ----
+    if highlight:
+        edges = cv2.Canny(gray_roi, 60, 160)
+        contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        for cnt in contours:
+            cnt[:, :, 0] += x1
+            cnt[:, :, 1] += y1
+            cv2.drawContours(frame, [cnt], -1, (0, 255, 0), 3)
+
+        st.success("✔ Object detected entering focus area")
+    else:
+        st.info("Waiting for object to enter focus area")
 
     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     st.image(frame_rgb, use_container_width=True)
 
     step = data["steps"][int(time.time()) % len(data["steps"])]
     st.info(f"**Current Step:** {step['text']} — {step['desc']}")
+
 else:
-    st.warning("Enable camera to start AR view.")
+    st.warning("Enable camera and bring an object into the focus box.")
