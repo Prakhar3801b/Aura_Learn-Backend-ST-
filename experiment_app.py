@@ -6,12 +6,12 @@ import os
 # ... Imports ...
 import google.generativeai as genai
 
-# !!! PASTE YOUR API KEY HERE !!!
-GEMINI_API_KEY =os.environ.get("GEMINI_API_KEY")
 
-# Configure Gemini
+
+
+
 try:
-    genai.configure(api_key=GEMINI_API_KEY)
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 except Exception as e:
     pass # Will fail if key is empty, handled in chat loop
 
@@ -267,5 +267,6 @@ else:
         # Video might flicker once, but it should work.
         
         time.sleep(0.03)
+
 
 
