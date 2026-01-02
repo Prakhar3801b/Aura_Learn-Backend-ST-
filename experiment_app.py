@@ -69,10 +69,20 @@ data = EXPERIMENTS.get(experiment_key, EXPERIMENTS["physics"])
 # ===============================
 def safe_gemini_response(prompt_text):
     try:
-        model = genai.GenerativeModel("gemini-pro")
+        model = genai.GenerativeModel("models/gemini-1.5-flash")
+
         result = model.generate_content(
             f"{data['context']}\nUser: {prompt_text}\nAnswer briefly."
         )
+
+        if hasattr(result, "text") and result.text:
+            return result.text.strip()
+        else:
+            return "⚠️ AI returned no content. Try rephrasing your question."
+
+    except Exception as e:
+        return f"⚠️ AI error: {str(e)}"
+
 
         if hasattr(result, "text") and result.text:
             return result.text.strip()
@@ -199,3 +209,4 @@ if uploaded:
 
 else:
     st.warning("Enable camera and bring an object into the focus box.")
+
