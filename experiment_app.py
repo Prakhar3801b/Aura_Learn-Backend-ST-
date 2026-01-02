@@ -6,7 +6,7 @@ from PIL import Image
 import google.generativeai as genai
 
 # ===============================
-# Gemini Configuration
+# Gemini Configuration (SAFE)
 # ===============================
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
@@ -65,12 +65,29 @@ experiment_key = params.get("experiment", "physics")
 data = EXPERIMENTS.get(experiment_key, EXPERIMENTS["physics"])
 
 # ===============================
-# Sidebar (AI BOT)
+# SAFE GEMINI RESPONSE FUNCTION
+# ===============================
+def safe_gemini_response(prompt_text):
+    try:
+        model = genai.GenerativeModel("gemini-pro")
+        result = model.generate_content(
+            f"{data['context']}\nUser: {prompt_text}\nAnswer briefly."
+        )
+
+        if hasattr(result, "text") and result.text:
+            return result.text.strip()
+        else:
+            return "⚠️ AI response was empty. Please try again."
+
+    except Exception:
+        return "⚠️ AI service is temporarily unavailable. Please try again later."
+
+# ===============================
+# Sidebar — AI BOT
 # ===============================
 with st.sidebar:
     st.title("🧪 Experiment Control")
     st.subheader(data["title"])
-
     st.markdown("---")
     st.subheader("🤖 AURA-Bot")
 
@@ -90,10 +107,7 @@ with st.sidebar:
             if not GEMINI_AVAILABLE:
                 response = "⚠️ Gemini API key not configured."
             else:
-                model = genai.GenerativeModel("gemini-pro")
-                response = model.generate_content(
-                    f"{data['context']}\nUser: {prompt}\nAnswer briefly."
-                ).text
+                response = safe_gemini_response(prompt)
 
             st.markdown(response)
             st.session_state.messages.append({"role": "assistant", "content": response})
@@ -116,16 +130,35 @@ if uploaded:
     h, w, _ = frame.shape
 
     # ---- CENTER FOCUS BOX ----
-    roi_size = int(min(h, w) * 0.35)
+    roi_size = int(min(h, w) * 0.45)
     x1 = w // 2 - roi_size // 2
     y1 = h // 2 - roi_size // 2
     x2 = x1 + roi_size
     y2 = y1 + roi_size
 
-    # Draw focus box
-    cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 215, 0), 3)
-    cv2.putText(frame, "FOCUS AREA", (x1, y1 - 12),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 215, 0), 2)
+    # ---- DARKEN OUTSIDE AREA ----
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (0, 0), (w, h), (0, 0, 0), -1)
+    cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 0, 0), -1)
+    frame = cv2.addWeighted(overlay, 0.35, frame, 0.65, 0)
+
+    # ---- DRAW FOCUS BOX ----
+    cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 255, 255), 6)
+
+    # ---- CENTER CROSSHAIR ----
+    cx, cy = w // 2, h // 2
+    cv2.line(frame, (cx - 30, cy), (cx + 30, cy), (0, 255, 0), 3)
+    cv2.line(frame, (cx, cy - 30), (cx, cy + 30), (0, 255, 0), 3)
+
+    cv2.putText(
+        frame,
+        "FOCUS AREA",
+        (x1 + 15, y1 - 15),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.9,
+        (255, 255, 255),
+        3
+    )
 
     # ---- ROI PROCESSING ----
     roi = frame[y1:y2, x1:x2]
@@ -134,14 +167,11 @@ if uploaded:
 
     highlight = False
 
-    # ---- ENTRY DETECTION ----
     if st.session_state.prev_roi is not None:
         diff = cv2.absdiff(st.session_state.prev_roi, gray_roi)
         _, thresh = cv2.threshold(diff, 25, 255, cv2.THRESH_BINARY)
-
         change_ratio = np.sum(thresh) / thresh.size
 
-        # Object ENTERED the box
         if change_ratio > 0.02:
             highlight = True
 
@@ -155,7 +185,7 @@ if uploaded:
         for cnt in contours:
             cnt[:, :, 0] += x1
             cnt[:, :, 1] += y1
-            cv2.drawContours(frame, [cnt], -1, (0, 255, 0), 3)
+            cv2.drawContours(frame, [cnt], -1, (0, 255, 0), 4)
 
         st.success("✔ Object detected entering focus area")
     else:
