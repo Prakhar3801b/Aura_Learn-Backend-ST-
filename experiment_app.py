@@ -69,12 +69,29 @@ data = EXPERIMENTS.get(experiment_key, EXPERIMENTS["physics"])
 # ===============================
 def safe_gemini_response(prompt_text):
     try:
-        model = genai.GenerativeModel("models/gemini-1.5-flash-latest")
+        # Dynamically find a model that supports generateContent
+        available_model = None
+        for m in genai.list_models():
+            if "generateContent" in m.supported_generation_methods:
+                available_model = m.name
+                break
 
+        if not available_model:
+            return "⚠️ No compatible AI model available for this API key."
+
+        model = genai.GenerativeModel(available_model)
 
         result = model.generate_content(
             f"{data['context']}\nUser: {prompt_text}\nAnswer briefly."
         )
+
+        if hasattr(result, "text") and result.text:
+            return result.text.strip()
+        else:
+            return "⚠️ AI returned an empty response."
+
+    except Exception as e:
+        return f"⚠️ AI error: {str(e)}"
 
         if hasattr(result, "text") and result.text:
             return result.text.strip()
@@ -210,5 +227,6 @@ if uploaded:
 
 else:
     st.warning("Enable camera and bring an object into the focus box.")
+
 
 
