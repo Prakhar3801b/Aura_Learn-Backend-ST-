@@ -69,7 +69,8 @@ data = EXPERIMENTS.get(experiment_key, EXPERIMENTS["physics"])
 # ===============================
 def safe_gemini_response(prompt_text):
     try:
-        model = genai.GenerativeModel("models/gemini-1.5-flash")
+        model = genai.GenerativeModel("models/gemini-1.5-flash-latest")
+
 
         result = model.generate_content(
             f"{data['context']}\nUser: {prompt_text}\nAnswer briefly."
@@ -209,4 +210,5 @@ if uploaded:
 
 else:
     st.warning("Enable camera and bring an object into the focus box.")
+
 
